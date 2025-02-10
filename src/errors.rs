@@ -5,7 +5,7 @@ pub enum NoteError {
     #[error("Invalid action {0}")]
     InvalidAction(String),
 
-    #[error("Note nod found")]
+    #[error("Note not found")]
     NoteNotFound,
 
     #[error("Failed to parse request {0}")]
@@ -16,4 +16,7 @@ pub enum NoteError {
 
     #[error("Invalid request {0}")]
     InvalidRequest(String),
+
+    #[error("DynamoDb {0}")]
+    DynamoDB(String),
 }

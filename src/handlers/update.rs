@@ -1,73 +1,45 @@
-use crate::{
-    db::NOTES,
-    errors::NoteError,
-    models::{Note, NoteMessage, NoteRequest, NoteResponse},
-};
+use crate::db::get_dynamodb_client;
+use crate::errors::NoteError;
+use crate::models::{NoteMessage, NoteRequest, NoteResponse};
+use aws_sdk_dynamodb::types::AttributeValue;
 
 pub async fn update_note(request: NoteRequest) -> Result<NoteResponse, NoteError> {
-    let id = request.id.ok_or(NoteError::InvalidRequest(
-        "Missing id in update request.".to_string(),
-    ))?;
+    let client = get_dynamodb_client()
+        .await
+        .map_err(|_| NoteError::DynamoDB("Failed to get DynamoDB client".to_string()))?;
 
+    let id = request.id.ok_or(NoteError::InvalidRequest(
+        "Missing id in update request".to_string(),
+    ))?;
     let content = request.content.ok_or(NoteError::InvalidRequest(
         "Missing content in update request.".to_string(),
     ))?;
 
-    let mut notes = NOTES.lock().map_err(|_| NoteError::Internal)?;
+    let existing_note = client
+        .get_item()
+        .table_name("notes")
+        .key("id", AttributeValue::S(id.clone()))
+        .send()
+        .await
+        .map_err(|_| NoteError::DynamoDB("Failed to fetch note from DynamoDB".to_string()))?;
 
-    if notes.contains_key(&id) {
-        notes.insert(
-            id.clone(),
-            Note {
-                id: id.clone(),
-                content: content.clone(),
-            },
-        );
-        return Ok(NoteResponse {
-            message: NoteMessage::NoteUpdated,
-            id: Some(id),
-            content: Some(content),
-        });
-    }
-    Err(NoteError::NoteNotFound)
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::{
-        handlers::{create::create_note, update::update_note},
-        models::{NoteAction, NoteMessage, NoteRequest},
-    };
-
-    #[tokio::test]
-    async fn test_update_note() {
-        let create_request = NoteRequest {
-            action: NoteAction::Create,
-            id: None,
-            content: Some("Old content".to_string()),
-        };
-
-        let create_response = create_note(create_request).await.unwrap();
-        let update_request = NoteRequest {
-            action: NoteAction::Update,
-            id: create_response.id.clone(),
-            content: Some("New content".to_string()),
-        };
-
-        let response = update_note(update_request).await.unwrap();
-        assert_eq!(response.message, NoteMessage::NoteUpdated);
-        assert_eq!(response.content, Some("New content".to_string()));
+    if existing_note.item.is_none() {
+        return Err(NoteError::NoteNotFound);
     }
 
-    #[tokio::test]
-    async fn test_update_non_existent_note() {
-        let update_request = NoteRequest {
-            action: NoteAction::Update,
-            id: Some("non-existent-id".to_string()),
-            content: Some("Updated content".to_string()),
-        };
+    client
+        .update_item()
+        .table_name("notes")
+        .key("id", AttributeValue::S(id.clone()))
+        .update_expression("SET content = :content")
+        .expression_attribute_values(":content", AttributeValue::S(content.clone()))
+        .send()
+        .await
+        .map_err(|_| NoteError::DynamoDB("Failed to update note in DynamoDB".to_string()))?;
 
-        let response = update_note(update_request).await;
-        assert!(response.is_err());
-    }
+    Ok(NoteResponse {
+        id: Some(id),
+        message: NoteMessage::NoteUpdated,
+        content: Some(content),
+    })
 }

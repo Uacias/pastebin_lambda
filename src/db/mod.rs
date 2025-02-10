@@ -1,5 +1,16 @@
-use crate::models::Note;
-use once_cell::sync::Lazy;
-use std::{collections::HashMap, sync::Mutex};
+use aws_config::meta::region::RegionProviderChain;
+use aws_config::BehaviorVersion;
+use aws_sdk_dynamodb::Client;
+use std::sync::Arc;
 
-pub static NOTES: Lazy<Mutex<HashMap<String, Note>>> = Lazy::new(|| Mutex::new(HashMap::new()));
+pub async fn get_dynamodb_client() -> Result<Arc<Client>, aws_sdk_dynamodb::Error> {
+    let region_provider = RegionProviderChain::default_provider();
+    let config = aws_config::from_env()
+        .region(region_provider)
+        .behavior_version(BehaviorVersion::latest())
+        .load()
+        .await;
+
+    let client = Client::new(&config);
+    Ok(Arc::new(client))
+}
