@@ -17,15 +17,23 @@ async fn handler(
 
     let http_method = event.payload.get("httpMethod").and_then(|m| m.as_str());
 
+    if let Some("OPTIONS") = http_method {
+        return Ok(json!({
+            "statusCode": 200,
+            "headers": cors_headers(),
+            "body": ""
+        }));
+    }
+
     let request: NoteRequest = match http_method {
-        Some("POST") => {
+        Some("POST") | Some("PUT") | Some("DELETE") => {
             if let Some(body) = event.payload.get("body").and_then(|b| b.as_str()) {
                 match serde_json::from_str(body) {
                     Ok(req) => req,
                     Err(_) => {
                         return Ok(json!({
                             "statusCode": 400,
-                            "headers": { "Content-Type": "application/json" },
+                            "headers": cors_headers(),
                             "body": json!({ "error": "Bad Request: Invalid JSON" }).to_string()
                         }));
                     }
@@ -33,7 +41,7 @@ async fn handler(
             } else {
                 return Ok(json!({
                     "statusCode": 400,
-                    "headers": { "Content-Type": "application/json" },
+                    "headers": cors_headers(),
                     "body": json!({ "error": "Bad Request: Missing body" }).to_string()
                 }));
             }
@@ -58,55 +66,15 @@ async fn handler(
             } else {
                 return Ok(json!({
                     "statusCode": 400,
-                    "headers": { "Content-Type": "application/json" },
+                    "headers": cors_headers(),
                     "body": json!({ "error": "Bad Request: Missing id parameter" }).to_string()
-                }));
-            }
-        }
-        Some("PUT") => {
-            if let Some(body) = event.payload.get("body").and_then(|b| b.as_str()) {
-                match serde_json::from_str(body) {
-                    Ok(req) => req,
-                    Err(_) => {
-                        return Ok(json!({
-                            "statusCode": 400,
-                            "headers": { "Content-Type": "application/json" },
-                            "body": json!({ "error": "Bad Request: Invalid JSON" }).to_string()
-                        }));
-                    }
-                }
-            } else {
-                return Ok(json!({
-                    "statusCode": 400,
-                    "headers": { "Content-Type": "application/json" },
-                    "body": json!({ "error": "Bad Request: Missing body" }).to_string()
-                }));
-            }
-        }
-        Some("DELETE") => {
-            if let Some(body) = event.payload.get("body").and_then(|b| b.as_str()) {
-                match serde_json::from_str(body) {
-                    Ok(req) => req,
-                    Err(_) => {
-                        return Ok(json!({
-                            "statusCode": 400,
-                            "headers": { "Content-Type": "application/json" },
-                            "body": json!({ "error": "Bad Request: Invalid JSON" }).to_string()
-                        }));
-                    }
-                }
-            } else {
-                return Ok(json!({
-                    "statusCode": 400,
-                    "headers": { "Content-Type": "application/json" },
-                    "body": json!({ "error": "Bad Request: Missing body" }).to_string()
                 }));
             }
         }
         _ => {
             return Ok(json!({
                 "statusCode": 405,
-                "headers": { "Content-Type": "application/json" },
+                "headers": cors_headers(),
                 "body": json!({ "error": "Method Not Allowed" }).to_string()
             }));
         }
@@ -121,13 +89,19 @@ async fn handler(
 
     Ok(json!({
         "statusCode": 200,
-        "headers": {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*"
-        },
+        "headers": cors_headers(),
         "isBase64Encoded": false,
         "body": json!(response).to_string()
     }))
+}
+
+fn cors_headers() -> serde_json::Value {
+    json!({
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "OPTIONS, GET, POST, PUT, DELETE",
+        "Access-Control-Allow-Headers": "Content-Type"
+    })
 }
 
 use tracing::info;
