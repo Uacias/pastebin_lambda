@@ -35,6 +35,7 @@ pub struct NoteResponse {
     pub content: Option<String>,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Note {
     pub id: String,
     pub content: String,

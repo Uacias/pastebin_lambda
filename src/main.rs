@@ -1,4 +1,7 @@
-use handlers::{create::create_note, delete::delete_note, read::read_note, update::update_note};
+use handlers::{
+    create::create_note, delete::delete_note, list::list_notes, read::read_note,
+    update::update_note,
+};
 use lambda_runtime::{service_fn, LambdaEvent};
 use serde_json::json;
 use std::error::Error;
@@ -52,6 +55,7 @@ async fn handler(
                 .payload
                 .get("queryStringParameters")
                 .unwrap_or(&empty_json);
+
             let id = query_params_json
                 .get("id")
                 .and_then(|i| i.as_str())
@@ -64,11 +68,19 @@ async fn handler(
                     content: None,
                 }
             } else {
-                return Ok(json!({
-                    "statusCode": 400,
-                    "headers": cors_headers(),
-                    "body": json!({ "error": "Bad Request: Missing id parameter" }).to_string()
-                }));
+                // ✅ Pobieranie wszystkich notatek
+                return match list_notes().await {
+                    Ok(notes) => Ok(json!({
+                        "statusCode": 200,
+                        "headers": cors_headers(),
+                        "body": json!(notes).to_string()
+                    })),
+                    Err(_) => Ok(json!({
+                        "statusCode": 500,
+                        "headers": cors_headers(),
+                        "body": json!({ "error": "Internal Server Error" }).to_string()
+                    })),
+                };
             }
         }
         _ => {
@@ -95,12 +107,13 @@ async fn handler(
     }))
 }
 
+// ✅ Upewnij się, że nagłówki CORS są poprawne
 fn cors_headers() -> serde_json::Value {
     json!({
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "OPTIONS, GET, POST, PUT, DELETE",
-        "Access-Control-Allow-Headers": "Content-Type"
+        "Access-Control-Allow-Headers": "Authorization, Content-Type"
     })
 }
 
